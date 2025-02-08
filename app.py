@@ -39,18 +39,59 @@ mixtral_model = ChatOpenAI(model = "mistralai/Mixtral-8x22B-Instruct-v0.1",
 
 def load_video_transcript(video_url):
     try:
+        # First try with default language settings
         loader = YoutubeLoader.from_youtube_url(
             video_url,
-            language=["en"]  # Specify language(s) to try
+            add_video_info=True,  # Get video metadata
+            language=['en'],  # Try English first
+            translation='en'   # Try to get translation if available
         )
-        data = loader.load()
         
-        if not data:
-            raise ValueError("No transcript data found for this video")
+        # Add retry mechanism
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                data = loader.load()
+                if data and len(data) > 0:
+                    st.success("Successfully loaded video transcript!")
+                    return data
+                    
+            except Exception as e:
+                retry_count += 1
+                if retry_count < max_retries:
+                    st.warning(f"Attempt {retry_count} failed, retrying...")
+                    time.sleep(2)  # Wait 2 seconds before retrying
+                continue
             
-        return data
+        # If we get here, try with different language settings
+        loader = YoutubeLoader.from_youtube_url(
+            video_url,
+            add_video_info=True,
+            language=['en', 'auto'],  # Try auto-detection
+            translation='en'
+        )
+        
+        data = loader.load()
+        if data and len(data) > 0:
+            st.success("Successfully loaded video transcript with auto-detection!")
+            return data
+            
+        raise ValueError("No transcript data found after all attempts")
+        
     except Exception as e:
-        raise Exception(f"Failed to load video transcript: {str(e)}")
+        st.error(f"""
+        Failed to load video transcript. This could be due to:
+        - Video has no captions available
+        - Captions are still processing
+        - Captions are disabled by video owner
+        - YouTube API service disruption
+        
+        Error details: {str(e)}
+        """)
+        return None
+
 
 def create_qa_chain(vectorstore, model):
 
@@ -92,32 +133,57 @@ def display_chat_history():
             st.write(message)
 
 def process_url(video_url, model):
-    try:
-        website_data = load_video_transcript(video_url)
+    if not video_url:
+        st.error("Please enter a valid YouTube URL")
+        return False
         
+    try:
+        # Add URL validation
+        if "youtube.com" not in video_url and "youtu.be" not in video_url:
+            st.error("Please enter a valid YouTube URL")
+            return False
+            
+        with st.spinner("Loading video transcript..."):
+            website_data = load_video_transcript(video_url)
+            
         if not website_data:
-            st.error("No transcript found for this video. Please try a different video.")
             return False
 
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        video_splits = text_splitter.split_documents(website_data)
+        with st.spinner("Processing transcript..."):
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1000,
+                chunk_overlap=200,
+                length_function=len,
+                is_separator_regex=False
+            )
+            video_splits = text_splitter.split_documents(website_data)
 
-        if not video_splits:
-            st.error("Failed to process video transcript. The transcript might be empty.")
-            return False
+            if not video_splits:
+                st.error("Failed to process transcript - transcript might be empty")
+                return False
 
-        video_embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-        vectorstore = FAISS.from_documents(video_splits, video_embeddings)
+            # Cache the embeddings to avoid reprocessing
+            cache_key = f"embeddings_{video_url}"
+            if cache_key in st.session_state:
+                vectorstore = st.session_state[cache_key]
+            else:
+                video_embeddings = OpenAIEmbeddings(
+                    model="text-embedding-3-small",
+                    openai_api_key=st.secrets["OPENAI_API_KEY"]
+                )
+                vectorstore = FAISS.from_documents(video_splits, video_embeddings)
+                st.session_state[cache_key] = vectorstore
 
-        if model == "Llama":
-            model = llama_model
-        elif model == "Mistral":
-            model = mixtral_model
+            if model == "Llama":
+                model = llama_model
+            elif model == "Mistral":
+                model = mixtral_model
 
-        st.session_state.video_qa_chain = create_qa_chain(vectorstore, model)
-        st.session_state.YTUrlLoaded = True
+            st.session_state.video_qa_chain = create_qa_chain(vectorstore, model)
+            st.session_state.YTUrlLoaded = True
 
-        return True
+            return True
+            
     except Exception as e:
         st.error(f"An error occurred during processing: {str(e)}")
         return False
