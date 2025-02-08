@@ -41,7 +41,7 @@ def load_video_transcript(video_url):
     try:
         loader = YoutubeLoader.from_youtube_url(
             video_url,
-            add_video_info=True,  # Add video information to document
+            # add_video_info=True,  # Add video information to document
             language="en",  # Specify language
             translation="en"  # Optional translation
         )
