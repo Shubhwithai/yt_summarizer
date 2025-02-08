@@ -1,11 +1,10 @@
 streamlit
-langchain
-langchain-openai
-langchain-community
+langchain-community==0.3.3 
+langchain==0.3.4
 openai
 tiktoken
 requests
 faiss-cpu
 beautifulsoup4
-youtube_transcript_api
-pytube
+youtube_transcript_api==0.6.2 
+pytube==15.0.0
