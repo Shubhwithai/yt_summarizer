@@ -1,0 +1,11 @@
+streamlit
+langchain
+langchain-openai
+langchain-community
+openai
+tiktoken
+requests
+faiss-cpu
+beautifulsoup4
+youtube_transcript_api
+pytube
