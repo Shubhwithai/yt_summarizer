@@ -38,23 +38,11 @@ mixtral_model = ChatOpenAI(model = "mistralai/Mixtral-8x22B-Instruct-v0.1",
                     openai_api_base = "https://api.together.xyz/v1")
 
 def load_video_transcript(video_url):
-    try:
-        loader = YoutubeLoader.from_youtube_url(
-            video_url,
-            # add_video_info=True,  # Add video information to document
-            language="en",  # Specify language
-            translation="en"  # Optional translation
-        )
-        data = loader.load()
-        
-        # Check if data is empty
-        if not data:
-            raise ValueError("No transcript available for this video")
-            
-        return data
-    except Exception as e:
-        raise Exception(f"Failed to load transcript: {str(e)}")
-
+    loader = YoutubeLoader.from_youtube_url(
+        video_url,
+    )
+    data = loader.load()
+    return data
 
 def create_qa_chain(vectorstore, model):
 
@@ -104,6 +92,11 @@ def process_url(video_url, model):
 
         video_embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
+        # Create a Chroma vector store
+        # it failed miserably, when changing language or model so we are using FAISS instead
+        # vectorstore = Chroma.from_documents(video_splits, video_embeddings, collection_name="video_transcript")
+
+        # Create a FAISS vector store
         vectorstore = FAISS.from_documents(video_splits, video_embeddings)
 
         if model == "Llama":
@@ -111,15 +104,15 @@ def process_url(video_url, model):
         elif model == "Mistral":
             model = mixtral_model
 
+        # Create conversation chain
         st.session_state.video_qa_chain = create_qa_chain(vectorstore, model)
+
         st.session_state.YTUrlLoaded = True
+
         return True
-        
     except Exception as e:
-        if "No transcript available" in str(e):
-            st.error("❌ This video doesn't have available transcripts. Please try a different video.")
-        else:
-            st.error(f"⚠️ An error occurred: {str(e)}")
+        st.error(f"An error occurred during processing: {str(e)}")
+        # st.error(f"This Video may not have Transcript, Try a different Video")
         return False
 
 def initiate_processing():
