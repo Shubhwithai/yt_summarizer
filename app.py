@@ -1,6 +1,7 @@
 from pytube import YouTube
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptAvailable
+import streamlit as st
 
 def is_valid_youtube_url(url):
     """Check if the URL is a valid YouTube URL."""
